@@ -464,10 +464,7 @@ async function apiPost(url, body) {
 async function loadPhotos() {
   show('loading-screen');
   try {
-    const data = await apiPost('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
-      pageSize: PAGE_SIZE,
-      filters: { mediaTypeFilter: { mediaTypes: ['PHOTO'] } }
-    });
+    const data = await apiGet(`https://photoslibrary.googleapis.com/v1/mediaItems?pageSize=${PAGE_SIZE}`);
     photos = (data.mediaItems || []).map(item => ({
       id: item.id,
       baseUrl: item.baseUrl,
