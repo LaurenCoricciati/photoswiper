@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PhotoSwiper</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --border: #2a2a2a;
+    --text: #f0f0f0;
+    --muted: #666;
+    --keep: #00e5a0;
+    --delete: #ff3b5c;
+    --accent: #ffe566;
+    --card-radius: 20px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  /* ── LOGIN SCREEN ── */
+  #login-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    padding: 40px 24px;
+    text-align: center;
+    height: 100dvh;
+  }
+
+  .logo {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  .logo span { color: var(--accent); }
+
+  .tagline {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    line-height: 1.6;
+    max-width: 260px;
+  }
+
+  .btn-google {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--text);
+    color: #0a0a0a;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 28px;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, opacity 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .btn-google:active { transform: scale(0.96); opacity: 0.85; }
+
+  .google-icon { width: 20px; height: 20px; }
+
+  .hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 280px;
+    line-height: 1.7;
+  }
+
+  /* ── MAIN APP ── */
+  #app-screen {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    height: 100dvh;
+    max-width: 420px;
+    position: relative;
+  }
+
+  /* header */
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 8px;
+    flex-shrink: 0;
+  }
+  .app-title {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+  .app-title span { color: var(--accent); }
+
+  .counter {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--surface);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  /* card stack */
+  .card-stack {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 20px;
+    overflow: hidden;
+  }
+
+  .card {
+    position: absolute;
+    width: calc(100% - 40px);
+    max-width: 380px;
+    aspect-ratio: 3/4;
+    border-radius: var(--card-radius);
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    transform-origin: center bottom;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    transition: box-shadow 0.2s;
+  }
+  .card:active { cursor: grabbing; }
+
+  .card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    display: block;
+  }
+
+  .card-bg-placeholder {
+    width: 100%;
+    height: 100%;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+  }
+
+  /* stacked cards behind */
+  .card.behind-1 {
+    transform: scale(0.93) translateY(12px);
+    z-index: 1;
+    pointer-events: none;
+    filter: brightness(0.6);
+  }
+  .card.behind-2 {
+    transform: scale(0.86) translateY(24px);
+    z-index: 0;
+    pointer-events: none;
+    filter: brightness(0.35);
+  }
+  .card.active {
+    z-index: 10;
+    transition: transform 0.05s;
+  }
+  .card.flying {
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s;
+    pointer-events: none;
+  }
+
+  /* swipe indicators */
+  .swipe-label {
+    position: absolute;
+    top: 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 6px 16px;
+    border-radius: 8px;
+    border-width: 3px;
+    border-style: solid;
+    opacity: 0;
+    transform: rotate(-8deg);
+    pointer-events: none;
+    z-index: 20;
+    transition: opacity 0.1s;
+  }
+  .swipe-label.keep {
+    left: 20px;
+    color: var(--keep);
+    border-color: var(--keep);
+    transform: rotate(-8deg);
+  }
+  .swipe-label.delete {
+    right: 20px;
+    color: var(--delete);
+    border-color: var(--delete);
+    transform: rotate(8deg);
+  }
+
+  /* buttons */
+  .action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 16px 20px 28px;
+    flex-shrink: 0;
+  }
+
+  .action-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 26px;
+    transition: transform 0.15s, opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .action-btn:active { transform: scale(0.88); opacity: 0.8; }
+
+  .btn-delete { background: rgba(255,59,92,0.15); border: 2px solid var(--delete); }
+  .btn-keep   { background: rgba(0,229,160,0.15); border: 2px solid var(--keep); }
+  .btn-undo   { background: var(--surface); border: 2px solid var(--border); font-size: 20px; width: 48px; height: 48px; }
+
+  /* progress bar */
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    margin: 0 20px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  /* empty / done state */
+  #done-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    height: 100dvh;
+    padding: 40px;
+    text-align: center;
+  }
+  .done-icon { font-size: 56px; }
+  .done-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+  .done-sub { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .btn-restart {
+    background: var(--accent);
+    color: #0a0a0a;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 32px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .btn-restart:active { transform: scale(0.96); }
+
+  /* loading */
+  #loading-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    height: 100dvh;
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--muted); }
+
+  /* toast */
+  .toast {
+    position: fixed;
+    bottom: 110px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: 50px;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="logo">Photo<span>Swiper</span></div>
+  <p class="tagline">Scorri a destra per tenere.<br>Scorri a sinistra per eliminare.<br>Semplice.</p>
+  <button class="btn-google" onclick="startOAuth()">
+    <svg class="google-icon" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+    Accedi con Google
+  </button>
+  <p class="hint">Verrà chiesto accesso in sola lettura alle tue foto e permesso di creare album.</p>
+</div>
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p class="loading-text">Carico le foto...</p>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+  <div class="app-header">
+    <div class="app-title">Photo<span>Swiper</span></div>
+    <div class="counter" id="counter">— / —</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+  <div class="card-stack" id="card-stack">
+    <!-- cards injected here -->
+  </div>
+  <div class="action-bar">
+    <button class="action-btn btn-delete" onclick="swipeAction('left')" title="Elimina">🗑️</button>
+    <button class="action-btn btn-undo" onclick="undoAction()" title="Annulla">↩️</button>
+    <button class="action-btn btn-keep" onclick="swipeAction('right')" title="Tieni">✅</button>
+  </div>
+</div>
+
+<!-- DONE -->
+<div id="done-screen">
+  <div class="done-icon">🎉</div>
+  <div class="done-title">Tutto fatto!</div>
+  <p class="done-sub" id="done-sub">Hai segnato X foto da eliminare.<br>Aprile in Google Foto → Album → "Da eliminare".</p>
+  <button class="btn-restart" onclick="restartApp()">Ricarica foto</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────
+const CLIENT_ID   = '639448192240-jnn663cj523982ack4ohb23qi44uhmfk.apps.googleusercontent.com';
+const SCOPES      = 'https://www.googleapis.com/auth/photoslibrary.readonly https://www.googleapis.com/auth/photoslibrary.appendonly';
+const ALBUM_TITLE = 'Da eliminare 🗑️';
+const PAGE_SIZE   = 20; // foto caricate per sessione
+
+// ── STATE ────────────────────────────────────────────────
+let accessToken   = null;
+let photos        = [];   // array di {id, baseUrl, filename}
+let currentIndex  = 0;
+let toDeleteIds   = [];   // id foto marcate
+let history       = [];   // per undo
+let deleteAlbumId = null;
+let isDragging    = false;
+let startX = 0, startY = 0, currentX = 0;
+
+// ── OAUTH ────────────────────────────────────────────────
+function startOAuth() {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: window.location.origin + window.location.pathname,
+    response_type: 'token',
+    scope: SCOPES,
+    include_granted_scopes: 'true',
+  });
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+function checkOAuthCallback() {
+  const hash = window.location.hash;
+  if (!hash) return false;
+  const params = new URLSearchParams(hash.substring(1));
+  const token = params.get('access_token');
+  if (!token) return false;
+  accessToken = token;
+  // pulisce l'URL
+  history.replaceState(null, '', window.location.pathname);
+  return true;
+}
+
+// ── API HELPERS ──────────────────────────────────────────
+async function apiGet(url) {
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  return r.json();
+}
+
+async function apiPost(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  return r.json();
+}
+
+// ── LOAD PHOTOS ──────────────────────────────────────────
+async function loadPhotos() {
+  show('loading-screen');
+  try {
+    const data = await apiPost('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
+      pageSize: PAGE_SIZE,
+      filters: { mediaTypeFilter: { mediaTypes: ['PHOTO'] } }
+    });
+    photos = (data.mediaItems || []).map(item => ({
+      id: item.id,
+      baseUrl: item.baseUrl,
+      filename: item.filename || 'foto',
+    }));
+    if (photos.length === 0) {
+      showToast('Nessuna foto trovata!');
+      show('done-screen');
+      return;
+    }
+    currentIndex = 0;
+    toDeleteIds = [];
+    history = [];
+    renderCards();
+    show('app-screen');
+  } catch(e) {
+    showToast('Errore caricamento foto: ' + e.message);
+    show('login-screen');
+  }
+}
+
+// ── RENDER ───────────────────────────────────────────────
+function renderCards() {
+  const stack = document.getElementById('card-stack');
+  stack.innerHTML = '';
+
+  for (let i = Math.min(currentIndex + 2, photos.length - 1); i >= currentIndex; i--) {
+    if (i >= photos.length) continue;
+    const photo = photos[i];
+    const card = document.createElement('div');
+    card.className = 'card' + (i === currentIndex ? ' active' : i === currentIndex+1 ? ' behind-1' : ' behind-2');
+    card.dataset.index = i;
+
+    const img = document.createElement('img');
+    img.src = photo.baseUrl + '=w800-h1000';
+    img.alt = photo.filename;
+    img.draggable = false;
+    img.onerror = () => { img.style.display='none'; };
+
+    if (i === currentIndex) {
+      // swipe labels
+      const labelKeep = document.createElement('div');
+      labelKeep.className = 'swipe-label keep';
+      labelKeep.textContent = 'TIENI';
+      const labelDel = document.createElement('div');
+      labelDel.className = 'swipe-label delete';
+      labelDel.textContent = 'ELIMINA';
+      card.appendChild(labelKeep);
+      card.appendChild(labelDel);
+
+      // drag events
+      card.addEventListener('pointerdown', onPointerDown);
+    }
+
+    card.appendChild(img);
+    stack.appendChild(card);
+  }
+
+  updateCounter();
+  updateProgress();
+}
+
+function updateCounter() {
+  const el = document.getElementById('counter');
+  el.textContent = photos.length > 0 ? `${currentIndex + 1} / ${photos.length}` : '— / —';
+}
+
+function updateProgress() {
+  const el = document.getElementById('progress');
+  el.style.width = photos.length > 0 ? `${(currentIndex / photos.length) * 100}%` : '0%';
+}
+
+// ── DRAG ─────────────────────────────────────────────────
+function onPointerDown(e) {
+  isDragging = true;
+  startX = e.clientX || e.touches?.[0]?.clientX || 0;
+  startY = e.clientY || e.touches?.[0]?.clientY || 0;
+  currentX = 0;
+  const card = e.currentTarget;
+  card.setPointerCapture(e.pointerId);
+  card.addEventListener('pointermove', onPointerMove);
+  card.addEventListener('pointerup', onPointerUp);
+  card.addEventListener('pointercancel', onPointerUp);
+}
+
+function onPointerMove(e) {
+  if (!isDragging) return;
+  currentX = (e.clientX || 0) - startX;
+  const currentY = (e.clientY || 0) - startY;
+  const rotation = currentX * 0.08;
+  const card = e.currentTarget;
+  card.style.transform = `translate(${currentX}px, ${currentY * 0.3}px) rotate(${rotation}deg)`;
+  card.style.transition = 'none';
+
+  const ratio = Math.abs(currentX) / 100;
+  const keepLabel = card.querySelector('.swipe-label.keep');
+  const delLabel  = card.querySelector('.swipe-label.delete');
+  if (currentX > 0) {
+    if (keepLabel) keepLabel.style.opacity = Math.min(ratio, 1);
+    if (delLabel)  delLabel.style.opacity  = 0;
+  } else {
+    if (delLabel)  delLabel.style.opacity  = Math.min(ratio, 1);
+    if (keepLabel) keepLabel.style.opacity = 0;
+  }
+}
+
+function onPointerUp(e) {
+  if (!isDragging) return;
+  isDragging = false;
+  const card = e.currentTarget;
+  card.removeEventListener('pointermove', onPointerMove);
+  card.removeEventListener('pointerup', onPointerUp);
+  card.removeEventListener('pointercancel', onPointerUp);
+
+  const threshold = window.innerWidth * 0.35;
+  if (currentX > threshold) {
+    flyOut(card, 'right');
+  } else if (currentX < -threshold) {
+    flyOut(card, 'left');
+  } else {
+    // snap back
+    card.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+    card.style.transform = '';
+    card.querySelector('.swipe-label.keep').style.opacity = 0;
+    card.querySelector('.swipe-label.delete').style.opacity = 0;
+  }
+}
+
+function flyOut(card, direction) {
+  const xTarget = direction === 'right' ? window.innerWidth * 1.5 : -window.innerWidth * 1.5;
+  card.classList.add('flying');
+  card.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.4s';
+  card.style.transform = `translate(${xTarget}px, -60px) rotate(${direction === 'right' ? 30 : -30}deg)`;
+  card.style.opacity = '0';
+  setTimeout(() => processSwipe(direction), 350);
+}
+
+// ── SWIPE LOGIC ──────────────────────────────────────────
+function processSwipe(direction) {
+  const photo = photos[currentIndex];
+  history.push({ index: currentIndex, direction, photoId: photo.id });
+
+  if (direction === 'left') {
+    toDeleteIds.push(photo.id);
+    showToast('🗑️ Aggiunta a "Da eliminare"');
+  } else {
+    showToast('✅ Tenuta');
+  }
+
+  currentIndex++;
+  if (currentIndex >= photos.length) {
+    finishSession();
+  } else {
+    renderCards();
+  }
+}
+
+function swipeAction(direction) {
+  const stack = document.getElementById('card-stack');
+  const activeCard = stack.querySelector('.card.active');
+  if (!activeCard) return;
+  flyOut(activeCard, direction);
+}
+
+function undoAction() {
+  if (history.length === 0) { showToast('Niente da annullare'); return; }
+  const last = history.pop();
+  if (last.direction === 'left') {
+    toDeleteIds = toDeleteIds.filter(id => id !== last.photoId);
+  }
+  currentIndex = last.index;
+  renderCards();
+  showToast('↩️ Annullato');
+}
+
+// ── FINISH ───────────────────────────────────────────────
+async function finishSession() {
+  if (toDeleteIds.length === 0) {
+    document.getElementById('done-sub').textContent = 'Nessuna foto segnata per l\'eliminazione. Bravi!';
+    show('done-screen');
+    return;
+  }
+
+  show('loading-screen');
+  document.querySelector('#loading-screen .loading-text').textContent = 'Creo l\'album...';
+
+  try {
+    // trova o crea album
+    if (!deleteAlbumId) {
+      deleteAlbumId = await findOrCreateAlbum(ALBUM_TITLE);
+    }
+    // aggiungi foto all'album
+    await apiPost(`https://photoslibrary.googleapis.com/v1/albums/${deleteAlbumId}:batchAddMediaItems`, {
+      mediaItemIds: toDeleteIds
+    });
+
+    document.getElementById('done-sub').innerHTML =
+      `Hai segnato <strong>${toDeleteIds.length}</strong> foto da eliminare.<br>` +
+      `Aprile in Google Foto → Album → <em>"${ALBUM_TITLE}"</em>`;
+    show('done-screen');
+  } catch(e) {
+    showToast('Errore creazione album: ' + e.message);
+    show('done-screen');
+  }
+}
+
+async function findOrCreateAlbum(title) {
+  // lista album esistenti
+  try {
+    const data = await apiGet('https://photoslibrary.googleapis.com/v1/albums?pageSize=50');
+    const existing = (data.albums || []).find(a => a.title === title);
+    if (existing) return existing.id;
+  } catch(e) { /* ignora, crea nuovo */ }
+
+  const created = await apiPost('https://photoslibrary.googleapis.com/v1/albums', {
+    album: { title }
+  });
+  return created.id;
+}
+
+// ── HELPERS ──────────────────────────────────────────────
+function show(screenId) {
+  ['login-screen','loading-screen','app-screen','done-screen'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.display = (id === screenId) ? 'flex' : 'none';
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function restartApp() {
+  deleteAlbumId = null;
+  loadPhotos();
+}
+
+// ── INIT ─────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  if (checkOAuthCallback()) {
+    loadPhotos();
+  } else {
+    show('login-screen');
+  }
+});
+</script>
+</body>
+</html>
