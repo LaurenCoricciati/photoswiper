@@ -481,8 +481,8 @@ async function loadPhotos() {
     renderCards();
     show('app-screen');
   } catch(e) {
-    showToast('Errore caricamento foto: ' + e.message);
-    show('login-screen');
+  showToast('Errore: ' + e.message);
+  alert('Errore completo: ' + e.message);    show('login-screen');
   }
 }
 
