@@ -404,11 +404,12 @@ const ALBUM_TITLE = 'Da eliminare 🗑️';
 const PAGE_SIZE   = 20; // foto caricate per sessione
 
 // ── STATE ────────────────────────────────────────────────
+const _history = window.history; // salvo prima che venga sovrascritto da variabili locali
 let accessToken   = null;
 let photos        = [];   // array di {id, baseUrl, filename}
 let currentIndex  = 0;
 let toDeleteIds   = [];   // id foto marcate
-let history       = [];   // per undo
+let undoStack     = [];   // per undo
 let deleteAlbumId = null;
 let isDragging    = false;
 let startX = 0, startY = 0, currentX = 0;
@@ -438,7 +439,7 @@ function checkOAuthCallback() {
   const token = params.get('access_token');
   if (!token) return false;
   accessToken = token;
-  window.history.replaceState(null, '', REDIRECT_URI);
+  _history.replaceState(null, '', REDIRECT_URI);
   return true;
 }
 
@@ -479,7 +480,7 @@ async function loadPhotos() {
     }
     currentIndex = 0;
     toDeleteIds = [];
-    history = [];
+    undoStack = [];
     renderCards();
     show('app-screen');
   } catch(e) {
@@ -607,7 +608,7 @@ function flyOut(card, direction) {
 // ── SWIPE LOGIC ──────────────────────────────────────────
 function processSwipe(direction) {
   const photo = photos[currentIndex];
-  history.push({ index: currentIndex, direction, photoId: photo.id });
+  undoStack.push({ index: currentIndex, direction, photoId: photo.id });
 
   if (direction === 'left') {
     toDeleteIds.push(photo.id);
@@ -632,8 +633,8 @@ function swipeAction(direction) {
 }
 
 function undoAction() {
-  if (history.length === 0) { showToast('Niente da annullare'); return; }
-  const last = history.pop();
+  if (undoStack.length === 0) { showToast('Niente da annullare'); return; }
+  const last = undoStack.pop();
   if (last.direction === 'left') {
     toDeleteIds = toDeleteIds.filter(id => id !== last.photoId);
   }
