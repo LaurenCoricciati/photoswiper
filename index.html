@@ -121,7 +121,7 @@
   /* DONE */
   #done-screen {
     display: none; flex-direction: column; align-items: center; justify-content: center;
-    gap: 20px; height: 100dvh; padding: 40px; text-align: center;
+    gap: 20px; height: 100dvh; padding: 40px; text-align: center; overflow-y: auto;
   }
   .done-icon { font-size: 56px; }
   .done-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
@@ -132,6 +132,14 @@
     cursor: pointer; transition: transform 0.15s;
   }
   .btn-restart:active { transform: scale(0.96); }
+  .delete-thumbs {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 360px;
+    max-height: 200px; overflow-y: auto;
+  }
+  .delete-thumb {
+    width: 72px; height: 72px; border-radius: 10px; object-fit: cover;
+    border: 2px solid var(--delete); cursor: pointer;
+  }
 
   /* LOADING */
   #loading-screen {
@@ -238,7 +246,7 @@
 // ── CONFIG ──────────────────────────────────────────────
 const CLIENT_ID   = '639448192240-jnn663cj523982ack4ohb23qi44uhmfk.apps.googleusercontent.com';
 const REDIRECT_URI = 'https://laurencoricciati.github.io/photoswiper/';
-const SCOPES      = 'https://www.googleapis.com/auth/photoslibrary.appendonly';
+const SCOPES      = 'https://www.googleapis.com/auth/photoslibrary.appendonly https://www.googleapis.com/auth/photoslibrary.readonly';
 const ALBUM_TITLE = 'Da eliminare 🗑️';
 const API_KEY = 'AIzaSyBMXWGmDdwN3xfSNWEhF0-sVKc6MeiitcE';
 
@@ -472,6 +480,7 @@ function undoAction() {
 async function finishSession() {
   if (toDeleteIds.length === 0) {
     document.getElementById('done-sub').textContent = 'Nessuna foto segnata. Ottimo!';
+    removeDoneThumbs();
     show('done-screen');
     return;
   }
@@ -485,11 +494,44 @@ async function finishSession() {
     document.getElementById('done-sub').innerHTML =
       `Hai segnato <strong>${toDeleteIds.length}</strong> foto da eliminare.<br>` +
       `Aprile in Google Foto → Album → <em>"${ALBUM_TITLE}"</em>`;
+    removeDoneThumbs();
     show('done-screen');
   } catch(e) {
-    showToast('Errore: ' + e.message);
-    show('done-screen');
+    showDoneFallback();
   }
+}
+
+function showDoneFallback() {
+  const toDeletePhotos = photos.filter(p => toDeleteIds.includes(p.id));
+  document.getElementById('done-sub').innerHTML =
+    `Hai segnato <strong>${toDeleteIds.length}</strong> foto da eliminare.<br>` +
+    `Toccale per aprirle in Google Foto e cancellarle.`;
+
+  let thumbsEl = document.getElementById('done-thumbs');
+  if (!thumbsEl) {
+    thumbsEl = document.createElement('div');
+    thumbsEl.id = 'done-thumbs';
+    thumbsEl.className = 'delete-thumbs';
+    document.getElementById('done-screen').insertBefore(
+      thumbsEl,
+      document.querySelector('.btn-restart')
+    );
+  }
+  thumbsEl.innerHTML = '';
+  toDeletePhotos.forEach(p => {
+    const img = document.createElement('img');
+    img.className = 'delete-thumb';
+    img.src = p.thumbUrl || p.baseUrl;
+    img.alt = p.filename;
+    img.onclick = () => window.open(p.baseUrl, '_blank');
+    thumbsEl.appendChild(img);
+  });
+  show('done-screen');
+}
+
+function removeDoneThumbs() {
+  const el = document.getElementById('done-thumbs');
+  if (el) el.remove();
 }
 
 async function findOrCreateAlbum(title) {
