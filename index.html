@@ -191,7 +191,7 @@
     </svg>
     Accedi con Google
   </button>
-  <p class="hint">Dopo il login potrai scegliere le foto da esaminare tramite il selettore Google Foto.</p>
+  <p class="hint">Dopo il login si aprirà il selettore ufficiale Google Foto.</p>
 </div>
 
 <!-- LOADING -->
@@ -203,13 +203,13 @@
 <!-- PICKER SCREEN -->
 <div id="picker-screen" style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:28px; height:100dvh; padding:40px; text-align:center;">
   <div class="logo" style="font-size:36px;">Photo<span style="color:var(--accent)">Swiper</span></div>
-  <p style="font-family:'Space Mono',monospace; font-size:13px; color:var(--muted); line-height:1.7; max-width:280px;">
-    Scegli le foto da esaminare.<br>Puoi selezionare un album o le foto recenti.
+  <p id="picker-msg" style="font-family:'Space Mono',monospace; font-size:13px; color:var(--muted); line-height:1.7; max-width:280px;">
+    Scegli le foto da esaminare.
   </p>
-  <button class="picker-btn" onclick="openPicker()">
+  <button class="picker-btn" id="picker-btn" onclick="openPicker()">
     📂 Scegli foto da Google Foto
   </button>
-  <p style="font-family:'Space Mono',monospace; font-size:11px; color:var(--muted);">
+  <p id="picker-hint" style="font-family:'Space Mono',monospace; font-size:11px; color:var(--muted);">
     Seleziona fino a 50 foto alla volta
   </p>
 </div>
@@ -239,27 +239,23 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- Google APIs -->
-<script src="https://apis.google.com/js/api.js"></script>
-
 <script>
 // ── CONFIG ──────────────────────────────────────────────
-const CLIENT_ID   = '639448192240-jnn663cj523982ack4ohb23qi44uhmfk.apps.googleusercontent.com';
+const CLIENT_ID    = '639448192240-jnn663cj523982ack4ohb23qi44uhmfk.apps.googleusercontent.com';
 const REDIRECT_URI = 'https://laurencoricciati.github.io/photoswiper/';
-const SCOPES      = 'https://www.googleapis.com/auth/photoslibrary.appendonly https://www.googleapis.com/auth/photoslibrary.readonly';
-const ALBUM_TITLE = 'Da eliminare 🗑️';
-const API_KEY = 'AIzaSyBMXWGmDdwN3xfSNWEhF0-sVKc6MeiitcE';
+const SCOPES       = 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly';
 
 // ── STATE ────────────────────────────────────────────────
 const _history = window.history;
-let accessToken   = null;
-let photos        = [];
-let currentIndex  = 0;
-let toDeleteIds   = [];
-let undoStack     = [];
-let deleteAlbumId = null;
-let isDragging    = false;
+let accessToken  = null;
+let photos       = [];
+let currentIndex = 0;
+let toDeleteIds  = [];
+let undoStack    = [];
+let isDragging   = false;
 let startX = 0, startY = 0, currentX = 0;
+let sessionId    = null;
+let pollTimer    = null;
 
 // ── OAUTH ────────────────────────────────────────────────
 function startOAuth() {
@@ -287,56 +283,94 @@ function checkOAuthCallback() {
   return true;
 }
 
-// ── GOOGLE PICKER ────────────────────────────────────────
-function openPicker() {
-  gapi.load('picker', () => {
-    const picker = new google.picker.PickerBuilder()
-      .addView(new google.picker.PhotosView()
-        .setType(google.picker.PhotosView.Type.ALBUMS))
-      .addView(new google.picker.PhotosView())
-      .setOAuthToken(accessToken)
-      .setDeveloperKey(API_KEY)
-      .setCallback(pickerCallback)
-      .setMaxItems(50)
-      .setTitle('Scegli le foto da esaminare')
-      .build();
-    picker.setVisible(true);
-  });
-}
-
-function pickerCallback(data) {
-  if (data.action === google.picker.Action.PICKED) {
-    const items = data[google.picker.Response.DOCUMENTS];
-    photos = items.map(item => ({
-      id: item[google.picker.Document.ID],
-      baseUrl: item[google.picker.Document.URL],
-      thumbUrl: item[google.picker.Document.THUMBNAILS]?.[item[google.picker.Document.THUMBNAILS].length - 1]?.url || item[google.picker.Document.URL],
-      filename: item[google.picker.Document.NAME] || 'foto',
-    }));
-    currentIndex = 0;
-    toDeleteIds = [];
-    undoStack = [];
-    deleteAlbumId = null;
-    renderCards();
-    show('app-screen');
+// ── PHOTOS PICKER API ────────────────────────────────────
+async function openPicker() {
+  try {
+    show('loading-screen');
+    document.getElementById('loading-text').textContent = 'Apertura selettore...';
+    const res = await fetch('https://photospicker.googleapis.com/v1/sessions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    if (!res.ok) throw new Error('Errore ' + res.status);
+    const session = await res.json();
+    sessionId = session.id;
+    window.open(session.pickerUri, '_blank');
+    showPickerWaiting();
+  } catch(e) {
+    showToast('Errore apertura: ' + e.message);
+    show('picker-screen');
   }
 }
 
-// ── API HELPERS ──────────────────────────────────────────
-async function apiPost(url, body) {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`API error ${r.status}`);
-  return r.json();
+function showPickerWaiting() {
+  document.getElementById('picker-msg').innerHTML =
+    'Si è aperto il selettore Google Foto.<br>Seleziona le foto, poi torna qui.';
+  const btn = document.getElementById('picker-btn');
+  btn.textContent = '✓ Ho scelto le foto';
+  btn.onclick = checkAndLoad;
+  document.getElementById('picker-hint').textContent = 'In attesa della tua selezione...';
+  show('picker-screen');
+  clearInterval(pollTimer);
+  pollTimer = setInterval(checkAndLoad, 3000);
 }
 
-async function apiGet(url) {
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!r.ok) throw new Error(`API error ${r.status}`);
-  return r.json();
+async function checkAndLoad() {
+  if (!sessionId) return;
+  try {
+    const res = await fetch(`https://photospicker.googleapis.com/v1/sessions/${sessionId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const session = await res.json();
+    if (!session.mediaItemsSet) return;
+    clearInterval(pollTimer);
+    await loadPickerItems();
+  } catch(e) {}
+}
+
+async function loadPickerItems() {
+  show('loading-screen');
+  document.getElementById('loading-text').textContent = 'Carico le foto...';
+  try {
+    const res = await fetch(
+      `https://photospicker.googleapis.com/v1/mediaItems?sessionId=${sessionId}&pageSize=50`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) throw new Error('Errore ' + res.status);
+    const data = await res.json();
+    photos = (data.mediaItems || []).map(item => ({
+      id: item.id,
+      baseUrl: item.mediaFile.baseUrl,
+      thumbUrl: item.mediaFile.baseUrl + '=w400',
+      filename: item.mediaFile.filename || 'foto',
+    }));
+    if (photos.length === 0) {
+      showToast('Nessuna foto selezionata');
+      resetPickerScreen();
+      show('picker-screen');
+      return;
+    }
+    currentIndex = 0;
+    toDeleteIds  = [];
+    undoStack    = [];
+    renderCards();
+    show('app-screen');
+  } catch(e) {
+    showToast('Errore caricamento: ' + e.message);
+    resetPickerScreen();
+    show('picker-screen');
+  }
+}
+
+function resetPickerScreen() {
+  sessionId = null;
+  clearInterval(pollTimer);
+  document.getElementById('picker-msg').textContent = 'Scegli le foto da esaminare.';
+  const btn = document.getElementById('picker-btn');
+  btn.textContent = '📂 Scegli foto da Google Foto';
+  btn.onclick = openPicker;
+  document.getElementById('picker-hint').textContent = 'Seleziona fino a 50 foto alla volta';
 }
 
 // ── RENDER ───────────────────────────────────────────────
@@ -477,34 +511,19 @@ function undoAction() {
 }
 
 // ── FINISH ───────────────────────────────────────────────
-async function finishSession() {
-  if (toDeleteIds.length === 0) {
+function finishSession() {
+  const toDeletePhotos = photos.filter(p => toDeleteIds.includes(p.id));
+
+  if (toDeletePhotos.length === 0) {
     document.getElementById('done-sub').textContent = 'Nessuna foto segnata. Ottimo!';
-    removeDoneThumbs();
+    const old = document.getElementById('done-thumbs');
+    if (old) old.remove();
     show('done-screen');
     return;
   }
-  show('loading-screen');
-  document.getElementById('loading-text').textContent = 'Creo album su Google Foto...';
-  try {
-    if (!deleteAlbumId) deleteAlbumId = await findOrCreateAlbum(ALBUM_TITLE);
-    await apiPost(`https://photoslibrary.googleapis.com/v1/albums/${deleteAlbumId}:batchAddMediaItems`, {
-      mediaItemIds: toDeleteIds
-    });
-    document.getElementById('done-sub').innerHTML =
-      `Hai segnato <strong>${toDeleteIds.length}</strong> foto da eliminare.<br>` +
-      `Aprile in Google Foto → Album → <em>"${ALBUM_TITLE}"</em>`;
-    removeDoneThumbs();
-    show('done-screen');
-  } catch(e) {
-    showDoneFallback();
-  }
-}
 
-function showDoneFallback() {
-  const toDeletePhotos = photos.filter(p => toDeleteIds.includes(p.id));
   document.getElementById('done-sub').innerHTML =
-    `Hai segnato <strong>${toDeleteIds.length}</strong> foto da eliminare.<br>` +
+    `Hai segnato <strong>${toDeletePhotos.length}</strong> foto da eliminare.<br>` +
     `Toccale per aprirle in Google Foto e cancellarle.`;
 
   let thumbsEl = document.getElementById('done-thumbs');
@@ -512,10 +531,7 @@ function showDoneFallback() {
     thumbsEl = document.createElement('div');
     thumbsEl.id = 'done-thumbs';
     thumbsEl.className = 'delete-thumbs';
-    document.getElementById('done-screen').insertBefore(
-      thumbsEl,
-      document.querySelector('.btn-restart')
-    );
+    document.getElementById('done-screen').insertBefore(thumbsEl, document.querySelector('.btn-restart'));
   }
   thumbsEl.innerHTML = '';
   toDeletePhotos.forEach(p => {
@@ -526,22 +542,8 @@ function showDoneFallback() {
     img.onclick = () => window.open(p.baseUrl, '_blank');
     thumbsEl.appendChild(img);
   });
+
   show('done-screen');
-}
-
-function removeDoneThumbs() {
-  const el = document.getElementById('done-thumbs');
-  if (el) el.remove();
-}
-
-async function findOrCreateAlbum(title) {
-  try {
-    const data = await apiGet('https://photoslibrary.googleapis.com/v1/albums?pageSize=50');
-    const existing = (data.albums || []).find(a => a.title === title);
-    if (existing) return existing.id;
-  } catch(e) {}
-  const created = await apiPost('https://photoslibrary.googleapis.com/v1/albums', { album: { title } });
-  return created.id;
 }
 
 // ── HELPERS ──────────────────────────────────────────────
@@ -559,6 +561,7 @@ function showToast(msg) {
 }
 
 function restartApp() {
+  resetPickerScreen();
   show('picker-screen');
 }
 
